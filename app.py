@@ -136,6 +136,21 @@ division_df["ProfitMargin"] = np.where(
     0
 )
 
+region_df = (
+    filtered.groupby("Region", as_index=False)
+    .agg(
+        Revenue=("Sales", "sum"),
+        Cost=("Cost", "sum"),
+        GrossProfit=("GrossProfit", "sum")
+    )
+)
+
+region_df["ProfitMargin"] = np.where(
+    region_df["Revenue"] != 0,
+    region_df["GrossProfit"] / region_df["Revenue"],
+    0
+)
+
 d1, d2 = st.columns(2)
 
 # Revenue vs Profit
