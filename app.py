@@ -176,10 +176,6 @@ with d2:
 
     st.plotly_chart(fig, use_container_width=True)
 
-with c2:
-    fig = px.bar(region_df, x="Region", y="GrossProfit",
-                 title="Gross Profit by Region", text_auto=".2s")
-    st.plotly_chart(fig, use_container_width=True)
 
 # Product analysis
 product = (filtered.groupby(["ProductName","Division"], as_index=False)
