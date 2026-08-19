@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Nassau Candy Profitability Analytics", page_icon="🍬", layout="wide")
 
@@ -114,15 +115,65 @@ f.metric("Profit Margin", f"{margin:.2%}")
 
 st.divider()
 
-# Executive charts
-c1,c2 = st.columns(2)
+# ============================================================
+# DIVISION PERFORMANCE DASHBOARD
+# ============================================================
 
-division_df = filtered.groupby("Division", as_index=False)["GrossProfit"].sum().sort_values("GrossProfit", ascending=False)
-region_df = filtered.groupby("Region", as_index=False)["GrossProfit"].sum().sort_values("GrossProfit", ascending=False)
+st.subheader("📊 Division Performance Dashboard")
 
-with c1:
-    fig = px.bar(division_df, x="Division", y="GrossProfit",
-                 title="Gross Profit by Division", text_auto=".2s")
+division_df = (
+    filtered.groupby("Division", as_index=False)
+    .agg(
+        Revenue=("Sales", "sum"),
+        Cost=("Cost", "sum"),
+        GrossProfit=("GrossProfit", "sum")
+    )
+)
+
+division_df["ProfitMargin"] = np.where(
+    division_df["Revenue"] != 0,
+    division_df["GrossProfit"] / division_df["Revenue"],
+    0
+)
+
+d1, d2 = st.columns(2)
+
+# Revenue vs Profit
+with d1:
+    division_long = division_df.melt(
+        id_vars="Division",
+        value_vars=["Revenue", "GrossProfit"],
+        var_name="Metric",
+        value_name="Amount"
+    )
+
+    fig = px.bar(
+        division_long,
+        x="Division",
+        y="Amount",
+        color="Metric",
+        barmode="group",
+        title="Revenue vs Gross Profit by Division",
+        text_auto=".2s"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# Margin Distribution
+with d2:
+    fig = px.bar(
+        division_df,
+        x="Division",
+        y="ProfitMargin",
+        title="Margin Distribution by Division",
+        text=division_df["ProfitMargin"].map(
+            lambda x: f"{x:.1%}"
+        )
+    )
+
+    fig.update_yaxes(tickformat=".0%")
+
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
@@ -153,6 +204,24 @@ with p2:
                      hover_data={"Profit_Margin":":.2%"},
                      title="Sales vs Gross Profit")
     st.plotly_chart(fig, use_container_width=True)
+
+# Cost vs Sales diagnostic
+st.subheader("💰 Cost vs Sales Diagnostics")
+
+fig = px.scatter(
+    product,
+    x="Total_Cost",
+    y="Total_Sales",
+    size="Gross_Profit",
+    color="Division",
+    hover_name="ProductName",
+    hover_data={
+        "Profit_Margin": ":.2%"
+    },
+    title="Cost vs Sales by Product"
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # Margin diagnostics
 m1,m2 = st.columns(2)
@@ -191,14 +260,131 @@ st.plotly_chart(px.bar(counts, x="Status", y="Products", text_auto=True,
                        title="Product Status Distribution"),
                 use_container_width=True)
 
-# Pareto-style contribution
+# ============================================================
+# PROFIT CONCENTRATION ANALYSIS
+# ============================================================
+
 st.subheader("📈 Profit Concentration Analysis")
+
 pareto = product.copy()
-pareto["Cumulative_%"] = pareto["Gross_Profit"].cumsum()/pareto["Gross_Profit"].sum()
-fig = px.bar(pareto.head(15), x="ProductName", y="Gross_Profit",
-             title="Top 15 Products – Gross Profit Contribution")
-fig.update_layout(xaxis_tickangle=-45)
-st.plotly_chart(fig, use_container_width=True)
+
+pareto = pareto.sort_values(
+    "Gross_Profit",
+    ascending=False
+).reset_index(drop=True)
+
+total_profit = pareto["Gross_Profit"].sum()
+
+pareto["Cumulative_Profit"] = pareto["Gross_Profit"].cumsum()
+
+pareto["Cumulative_%"] = (
+    pareto["Cumulative_Profit"] / total_profit
+)
+
+# -----------------------------
+# Dependency indicators
+# -----------------------------
+
+top5_share = (
+    pareto.head(5)["Gross_Profit"].sum()
+    / total_profit
+)
+
+top10_share = (
+    pareto.head(10)["Gross_Profit"].sum()
+    / total_profit
+)
+
+products_for_80 = (
+    (pareto["Cumulative_%"] < 0.80).sum() + 1
+)
+
+x1, x2, x3 = st.columns(3)
+
+x1.metric(
+    "Top 5 Profit Share",
+    f"{top5_share:.1%}"
+)
+
+x2.metric(
+    "Top 10 Profit Share",
+    f"{top10_share:.1%}"
+)
+
+x3.metric(
+    "Products for 80% Profit",
+    f"{products_for_80}"
+)
+
+# -----------------------------
+# Pareto Chart
+# -----------------------------
+
+pareto_display = pareto.head(15)
+
+fig = go.Figure()
+
+fig.add_trace(
+    go.Bar(
+        x=pareto_display["ProductName"],
+        y=pareto_display["Gross_Profit"],
+        name="Gross Profit"
+    )
+)
+
+fig.add_trace(
+    go.Scatter(
+        x=pareto_display["ProductName"],
+        y=pareto_display["Cumulative_%"] * 100,
+        mode="lines+markers",
+        name="Cumulative Profit %",
+        yaxis="y2"
+    )
+)
+
+fig.update_layout(
+    title="Pareto Analysis — Gross Profit Concentration",
+    xaxis_title="Product",
+    yaxis_title="Gross Profit",
+    yaxis2=dict(
+        title="Cumulative Profit %",
+        overlaying="y",
+        side="right",
+        range=[0, 100],
+        ticksuffix="%"
+    ),
+    xaxis_tickangle=-45
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# -----------------------------
+# Dependency indicators
+# -----------------------------
+
+st.subheader("🔗 Profit Dependency Indicators")
+
+dependency = pd.DataFrame({
+    "Indicator": [
+        "Top 5 Profit Share",
+        "Top 10 Profit Share",
+        "Products Required for 80% of Profit"
+    ],
+    "Value": [
+        f"{top5_share:.1%}",
+        f"{top10_share:.1%}",
+        str(products_for_80)
+    ]
+})
+
+st.dataframe(
+    dependency,
+    use_container_width=True,
+    hide_index=True
+)
 
 if len(pareto):
     share = pareto.head(5)["Gross_Profit"].sum()/pareto["Gross_Profit"].sum()
