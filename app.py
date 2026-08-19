@@ -49,21 +49,23 @@ def compact(x):
     return f"${x:,.0f}"
 
 st.sidebar.header("📁 Data")
-file = st.sidebar.file_uploader("Upload Nassau Candy CSV", type=["csv"])
 
-if file is None:
-    st.info("Upload your Nassau Candy CSV to start the analysis.")
-    st.markdown("""
-### Expected fields
-`ProductName`, `Division`, `Region`, `Sales`, `Cost`, `GrossProfit`, `Units`, `OrderDate`
+from pathlib import Path
 
-### Workflow
-**Excel → SQL → Power BI → Streamlit**
-""")
-    st.stop()
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_DATA_PATH = BASE_DIR / "Dataset" / "Nassau Candy Distribution.csv"
+
+file = st.sidebar.file_uploader(
+    "Upload another Nassau Candy CSV (optional)",
+    type=["csv"]
+)
 
 try:
-    df = load_data(file)
+    if file is not None:
+        df = load_data(file)
+    else:
+        df = load_data(DEFAULT_DATA_PATH)
+
 except Exception as e:
     st.error(f"Could not read the CSV: {e}")
     st.stop()
